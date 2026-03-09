@@ -2,6 +2,9 @@
 
 Standalone Go binary that subscribes to MQTT topics published by [r3p-mqtt](https://github.com/tectiv3/r3p-mqtt), logs all data to SQLite, and serves a web dashboard for live state and historical time-series visualization.
 
+<img width="800" src="https://github.com/user-attachments/assets/71d6685b-7d35-439e-90e5-e85eb8a7b8d2" />
+
+
 ## Features
 
 - Real-time monitoring via SSE (Server-Sent Events)
