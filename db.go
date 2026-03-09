@@ -134,17 +134,19 @@ func (d *DB) QueryLatest() ([]Reading, error) {
 	return rows, err
 }
 
-func selectTable(from, to int64) string {
+// resolution picks the preferred pre-aggregated table and bucket size.
+// Returns ("", 0) for raw data (no downsampling needed).
+func resolution(from, to int64) (table string, bucket int64) {
 	span := to - from
 	switch {
 	case span <= 6*3600:
-		return "readings"
+		return "", 0
 	case span <= 7*86400:
-		return "readings_5m"
+		return "readings_5m", 300
 	case span <= 90*86400:
-		return "readings_1h"
+		return "readings_1h", 3600
 	default:
-		return "readings_1d"
+		return "readings_1d", 86400
 	}
 }
 
@@ -156,25 +158,40 @@ type HistoryPoint struct {
 }
 
 func (d *DB) QueryHistory(topic string, from, to int64) ([]HistoryPoint, error) {
-	table := selectTable(from, to)
-	rows := make([]HistoryPoint, 0)
-	var err error
+	aggTable, bucket := resolution(from, to)
 
-	if table == "readings" {
-		err = d.reader.Select(&rows, fmt.Sprintf(`
+	// Short range: return raw readings
+	if aggTable == "" {
+		rows := make([]HistoryPoint, 0)
+		err := d.reader.Select(&rows, `
 			SELECT ts, value, value AS min, value AS max
-			FROM %s WHERE topic = ? AND ts >= ? AND ts <= ?
-			ORDER BY ts`, table),
-			topic, from, to,
-		)
-	} else {
-		err = d.reader.Select(&rows, fmt.Sprintf(`
-			SELECT ts, avg AS value, min, max
-			FROM %s WHERE topic = ? AND ts >= ? AND ts <= ?
-			ORDER BY ts`, table),
-			topic, from, to,
-		)
+			FROM readings WHERE topic = ? AND ts >= ? AND ts <= ?
+			ORDER BY ts`, topic, from, to)
+		return rows, err
 	}
+
+	// Try pre-aggregated table first
+	rows := make([]HistoryPoint, 0)
+	err := d.reader.Select(&rows, fmt.Sprintf(`
+		SELECT ts, avg AS value, min, max
+		FROM %s WHERE topic = ? AND ts >= ? AND ts <= ?
+		ORDER BY ts`, aggTable), topic, from, to)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) > 0 {
+		return rows, nil
+	}
+
+	// Aggregated table empty — downsample from raw readings on the fly
+	err = d.reader.Select(&rows, fmt.Sprintf(`
+		SELECT (ts / %d) * %d AS ts,
+		       CAST(AVG(value) AS INTEGER) AS value,
+		       MIN(value) AS min,
+		       MAX(value) AS max
+		FROM readings WHERE topic = ? AND ts >= ? AND ts <= ?
+		GROUP BY (ts / %d) * %d
+		ORDER BY ts`, bucket, bucket, bucket, bucket), topic, from, to)
 	return rows, err
 }
 
