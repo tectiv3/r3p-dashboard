@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>R3P Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1/dist/uPlot.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/uplot@1/dist/uPlot.iife.min.js"></script>
+    <style type="text/tailwindcss">
+        @custom-variant dark (&:where(.dark, .dark *));
+    </style>
+    <style>
+        [x-cloak] { display: none !important; }
+        .uplot .u-legend { display: none; }
+    </style>
+    <script>
+        (function() {
+            const stored = localStorage.getItem('r3p-theme') || 'system';
+            const isDark = stored === 'dark' || (stored === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            document.documentElement.classList.toggle('dark', isDark);
+        })();
+    </script>
+</head>
+<body class="bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen transition-colors" x-data="dashboard()" x-init="init()">
+
+    <!-- Top Bar -->
+    <header class="border-b border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center justify-between">
+        <h1 class="text-xl font-semibold tracking-tight">R3P Dashboard</h1>
+        <div class="flex items-center gap-4">
+            <!-- Theme switcher -->
+            <div class="flex items-center gap-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+                <template x-for="t in themes" :key="t.key">
+                    <button @click="setTheme(t.key)"
+                            class="px-2.5 py-1.5 text-sm rounded-md transition-colors"
+                            :class="theme === t.key
+                                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                                : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'"
+                            :title="t.label" x-html="t.icon">
+                    </button>
+                </template>
+            </div>
+
+            <!-- Settings toggle -->
+            <button @click="showSettings = !showSettings"
+                    class="text-sm transition-colors"
+                    :class="showSettings ? 'text-emerald-500' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'">
+                Settings
+            </button>
+
+            <!-- Online status -->
+            <div class="flex items-center gap-2 text-sm">
+                <span class="size-2.5 rounded-full" :class="online ? 'bg-emerald-400' : 'bg-red-500'"></span>
+                <span x-text="online ? 'Online' : 'Offline'" :class="online ? 'text-emerald-400' : 'text-red-400'"></span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-6 py-8 space-y-8" x-cloak>
+
+        <!-- Settings Panel -->
+        <div x-show="showSettings" x-transition
+             class="bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
+            <div x-show="hiddenCards.size > 0 || hiddenCharts.size > 0" class="space-y-3">
+                <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Hidden Metrics</h2>
+                <div class="flex flex-wrap gap-2">
+                    <template x-for="topic in hiddenCardsList" :key="'restore-card-'+topic">
+                        <button @click="toggleCard(topic)"
+                                class="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-emerald-100 dark:hover:bg-emerald-900 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors">
+                            <span x-text="topicName(topic)"></span>
+                            <span class="text-emerald-500">+</span>
+                        </button>
+                    </template>
+                </div>
+                <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-500" x-show="hiddenCharts.size > 0">Hidden Charts</h2>
+                <div class="flex flex-wrap gap-2" x-show="hiddenCharts.size > 0">
+                    <template x-for="topic in hiddenChartsList" :key="'restore-chart-'+topic">
+                        <button @click="toggleChart(topic)"
+                                class="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-emerald-100 dark:hover:bg-emerald-900 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors">
+                            <span x-text="topicName(topic)"></span>
+                            <span class="text-emerald-500">+</span>
+                        </button>
+                    </template>
+                </div>
+            </div>
+            <div x-show="hiddenCards.size === 0 && hiddenCharts.size === 0" class="text-sm text-gray-400">
+                All metrics and charts are visible. Dismiss cards or charts with the &times; button to hide them.
+            </div>
+        </div>
+
+        <!-- Live Cards -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            <template x-for="card in visibleCards" :key="card.topic">
+                <div class="group relative bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 transition-colors"
+                     :class="card.flash ? 'border-emerald-400 dark:border-emerald-800' : ''">
+                    <button @click="toggleCard(card.topic)"
+                            class="absolute top-2 right-2 size-5 flex items-center justify-center rounded text-gray-300 dark:text-gray-700 opacity-0 group-hover:opacity-100 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 transition-all"
+                            title="Hide metric">&times;</button>
+                    <div class="text-xs text-gray-500 uppercase tracking-wide" x-text="card.label"></div>
+                    <div class="mt-1 text-2xl font-mono font-bold" x-text="formatValue(card.topic, card.value)"></div>
+                    <div class="text-xs text-gray-400 dark:text-gray-600 mt-1" x-text="card.unit"></div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Time Range -->
+        <div class="flex items-center gap-4">
+            <div class="flex gap-1">
+                <template x-for="r in ranges" :key="r.key">
+                    <button @click="setRange(r.key)"
+                            class="px-3 py-1 text-xs rounded-lg transition-colors"
+                            :class="chartRange === r.key
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'">
+                        <span x-text="r.label"></span>
+                    </button>
+                </template>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <template x-for="ct in visibleChartTopics" :key="ct">
+            <div class="group relative bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
+                <button @click="toggleChart(ct)"
+                        class="absolute top-3 right-3 size-6 flex items-center justify-center rounded text-gray-300 dark:text-gray-700 opacity-0 group-hover:opacity-100 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 transition-all"
+                        title="Hide chart">&times;</button>
+                <div class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-3" x-text="topicName(ct)"></div>
+                <div :id="'chart-' + ct" class="w-full"></div>
+                <div x-show="chartStates[ct]?.loading" class="text-center text-gray-500 py-8 text-sm">Loading...</div>
+                <div x-show="!chartStates[ct]?.loading && chartStates[ct]?.empty" class="text-center text-gray-400 dark:text-gray-600 py-8 text-sm">No data for this range</div>
+            </div>
+        </template>
+
+        <!-- Events Log -->
+        <div class="bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-sm font-medium text-gray-600 dark:text-gray-400">Events</h2>
+                <span class="text-xs text-gray-400 dark:text-gray-600" x-text="events.length + ' events'"></span>
+            </div>
+            <div x-show="events.length === 0" class="text-center text-gray-400 dark:text-gray-600 py-8 text-sm">No events in this time range</div>
+            <div x-show="events.length > 0" class="space-y-2 max-h-64 overflow-y-auto">
+                <template x-for="ev in events" :key="ev.ts + ev.type">
+                    <div class="flex items-start gap-3 px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800/50 text-sm">
+                        <span class="shrink-0 px-1.5 py-0.5 rounded text-xs font-medium"
+                              :class="ev.type === 'fault'
+                                  ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                                  : 'bg-gray-200 dark:bg-gray-700 text-gray-500'"
+                              x-text="ev.type"></span>
+                        <span class="shrink-0 text-xs text-gray-400 dark:text-gray-500 font-mono tabular-nums pt-0.5" x-text="fmtEventTime(ev.ts)"></span>
+                        <span class="text-gray-700 dark:text-gray-300 break-all" x-text="ev.payload"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center text-xs text-gray-400 dark:text-gray-600">
+            <span x-text="sseStatus"></span>
+            · <span x-text="updateCount + ' updates'"></span>
+        </div>
+    </main>
+
+    <script>
+    function dashboard() {
+        const topicMeta = {};
+        const allTopicKeys = [
+            'battery_level', 'input_power', 'output_power',
+            'ac_input_power', 'ac_output_power', 'dc_input_power',
+            'cell_temperature',
+            'dc12v_output_power', 'usba_output_power', 'usbc_output_power',
+            'remaining_time_charging', 'remaining_time_discharging',
+            'battery_charge_limit_min', 'battery_charge_limit_max',
+            'ac_charging_speed',
+            'plugged_in_ac', 'energy_backup',
+        ];
+        const chartableKeys = [
+            'battery_level', 'input_power', 'output_power',
+            'ac_input_power', 'ac_output_power', 'dc_input_power',
+            'cell_temperature',
+            'dc12v_output_power', 'usba_output_power', 'usbc_output_power',
+        ];
+
+        const uplotInstances = {};
+        const resizeObservers = {};
+
+        function loadSet(key) {
+            try {
+                const v = localStorage.getItem(key);
+                return v ? new Set(JSON.parse(v)) : new Set();
+            } catch { return new Set(); }
+        }
+        function saveSet(key, set) {
+            localStorage.setItem(key, JSON.stringify([...set]));
+        }
+
+        const isDark = () => document.documentElement.classList.contains('dark');
+        function axisColor() { return isDark() ? '#6b7280' : '#9ca3af'; }
+        function gridColor() { return isDark() ? 'rgba(107,114,128,0.15)' : 'rgba(107,114,128,0.1)'; }
+
+        function fmtTime24(ts) {
+            const d = new Date(ts * 1000);
+            return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+        }
+        function fmtDate24(ts) {
+            const d = new Date(ts * 1000);
+            return String(d.getDate()).padStart(2,'0') + '.' +
+                   String(d.getMonth()+1).padStart(2,'0') + ' ' +
+                   String(d.getHours()).padStart(2,'0') + ':' +
+                   String(d.getMinutes()).padStart(2,'0');
+        }
+
+        return {
+            online: false,
+            cards: [],
+            values: {},
+            events: [],
+            sseStatus: 'Connecting...',
+            updateCount: 0,
+            chartRange: localStorage.getItem('r3p-range') || '6h',
+            chartStates: {},
+            showSettings: false,
+            theme: localStorage.getItem('r3p-theme') || 'system',
+            themes: [
+                { key: 'light', label: 'Light', icon: '&#9788;' },
+                { key: 'dark',  label: 'Dark',  icon: '&#9790;' },
+                { key: 'system', label: 'System', icon: '&#9881;' },
+            ],
+            hiddenCards: loadSet('r3p-hidden-cards'),
+            hiddenCharts: loadSet('r3p-hidden-charts'),
+            allTopicKeys,
+            chartableKeys,
+            ranges: [
+                { key: '6h',  label: '6h',  seconds: 6 * 3600 },
+                { key: '24h', label: '24h', seconds: 24 * 3600 },
+                { key: '7d',  label: '7d',  seconds: 7 * 86400 },
+                { key: '30d', label: '30d', seconds: 30 * 86400 },
+                { key: '1y',  label: '1y',  seconds: 365 * 86400 },
+                { key: 'all', label: 'All', seconds: 10 * 365 * 86400 },
+            ],
+
+            get visibleCards() {
+                return this.cards.filter(c => !this.hiddenCards.has(c.topic));
+            },
+            get visibleChartTopics() {
+                return chartableKeys.filter(k => !this.hiddenCharts.has(k));
+            },
+            get hiddenCardsList() {
+                return allTopicKeys.filter(k => this.hiddenCards.has(k));
+            },
+            get hiddenChartsList() {
+                return chartableKeys.filter(k => this.hiddenCharts.has(k));
+            },
+
+            topicName(topic) {
+                return topicMeta[topic]?.name || topic;
+            },
+
+            fmtEventTime(ts) {
+                const d = new Date(ts * 1000);
+                return String(d.getDate()).padStart(2,'0') + '.' +
+                       String(d.getMonth()+1).padStart(2,'0') + ' ' +
+                       String(d.getHours()).padStart(2,'0') + ':' +
+                       String(d.getMinutes()).padStart(2,'0') + ':' +
+                       String(d.getSeconds()).padStart(2,'0');
+            },
+
+            setTheme(t) {
+                this.theme = t;
+                localStorage.setItem('r3p-theme', t);
+                this.applyTheme();
+                this.$nextTick(() => this.loadAllCharts());
+            },
+
+            applyTheme() {
+                let dark;
+                if (this.theme === 'dark') dark = true;
+                else if (this.theme === 'light') dark = false;
+                else dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                document.documentElement.classList.toggle('dark', dark);
+            },
+
+            toggleCard(topic) {
+                if (this.hiddenCards.has(topic)) this.hiddenCards.delete(topic);
+                else this.hiddenCards.add(topic);
+                // Force reactivity on the Set
+                this.hiddenCards = new Set(this.hiddenCards);
+                saveSet('r3p-hidden-cards', this.hiddenCards);
+            },
+
+            toggleChart(topic) {
+                if (this.hiddenCharts.has(topic)) {
+                    this.hiddenCharts.delete(topic);
+                    this.hiddenCharts = new Set(this.hiddenCharts);
+                    saveSet('r3p-hidden-charts', this.hiddenCharts);
+                    this.$nextTick(() => this.loadChartFor(topic));
+                } else {
+                    this.destroyChart(topic);
+                    this.hiddenCharts.add(topic);
+                    this.hiddenCharts = new Set(this.hiddenCharts);
+                    saveSet('r3p-hidden-charts', this.hiddenCharts);
+                }
+            },
+
+            setRange(key) {
+                this.chartRange = key;
+                localStorage.setItem('r3p-range', key);
+                this.loadAllCharts();
+                this.loadEvents();
+            },
+
+            async init() {
+                const resp = await fetch('/api/topics');
+                const topics = await resp.json();
+                for (const [key, meta] of Object.entries(topics)) {
+                    topicMeta[key] = meta;
+                }
+
+                this.cards = allTopicKeys.map(topic => ({
+                    topic,
+                    label: topicMeta[topic]?.name || topic,
+                    unit: topicMeta[topic]?.unit || '',
+                    value: null,
+                    flash: false,
+                }));
+
+                for (const k of chartableKeys) {
+                    this.chartStates[k] = { loading: false, empty: false };
+                }
+
+                try {
+                    const cur = await fetch('/api/current');
+                    const rows = await cur.json();
+                    if (rows) {
+                        for (const row of rows) this.applyValue(row.topic, row.value);
+                    }
+                } catch (e) {
+                    console.error('Failed to load current values:', e);
+                }
+
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+                    if (this.theme === 'system') {
+                        this.applyTheme();
+                        this.$nextTick(() => this.loadAllCharts());
+                    }
+                });
+
+                this.connectSSE();
+                this.loadEvents();
+                this.$nextTick(() => this.loadAllCharts());
+            },
+
+            connectSSE() {
+                const es = new EventSource('/api/stream');
+                es.onopen = () => { this.sseStatus = 'Connected'; };
+                es.onmessage = (e) => {
+                    const update = JSON.parse(e.data);
+                    if (update.topic === 'fault') {
+                        this.events.unshift({ ts: update.ts, type: 'fault', payload: update.raw });
+                        return;
+                    }
+                    this.applyValue(update.topic, update.value);
+                    this.updateCount++;
+                };
+                es.onerror = () => { this.sseStatus = 'Reconnecting...'; };
+            },
+
+            applyValue(topic, value) {
+                this.values[topic] = value;
+                if (topic === 'online') this.online = value === 1;
+                const card = this.cards.find(c => c.topic === topic);
+                if (card) {
+                    card.value = value;
+                    card.flash = true;
+                    setTimeout(() => { card.flash = false; }, 300);
+                }
+            },
+
+            async loadEvents() {
+                const range = this.ranges.find(r => r.key === this.chartRange);
+                const now = Math.floor(Date.now() / 1000);
+                try {
+                    const resp = await fetch(`/api/events?from=${now - range.seconds}&to=${now}`);
+                    const rows = await resp.json();
+                    this.events = (rows || []).reverse();
+                } catch (e) {
+                    console.error('Events load error:', e);
+                }
+            },
+
+            loadAllCharts() {
+                for (const topic of this.visibleChartTopics) this.loadChartFor(topic);
+            },
+
+            destroyChart(topic) {
+                if (resizeObservers[topic]) { resizeObservers[topic].disconnect(); delete resizeObservers[topic]; }
+                if (uplotInstances[topic]) { uplotInstances[topic].destroy(); delete uplotInstances[topic]; }
+            },
+
+            async loadChartFor(topic) {
+                if (!this.chartStates[topic]) this.chartStates[topic] = { loading: false, empty: false };
+                this.chartStates[topic].loading = true;
+                this.chartStates[topic].empty = false;
+
+                const range = this.ranges.find(r => r.key === this.chartRange);
+                const now = Math.floor(Date.now() / 1000);
+                const from = now - range.seconds;
+                const to = now;
+                const meta = topicMeta[topic];
+                const scale = meta?.scale || 1;
+
+                try {
+                    const resp = await fetch(`/api/history?topic=${topic}&from=${from}&to=${to}`);
+                    const rows = await resp.json();
+
+                    if (!rows || rows.length === 0) {
+                        this.chartStates[topic].loading = false;
+                        this.chartStates[topic].empty = true;
+                        this.destroyChart(topic);
+                        return;
+                    }
+
+                    const timestamps = rows.map(r => r.ts);
+                    const values = rows.map(r => r.value / scale);
+                    const hasMinMax = rows.some(r => r.min !== r.max);
+
+                    const series = [
+                        {},
+                        { label: meta?.name || topic, stroke: '#10b981', width: 1.5, fill: 'rgba(16,185,129,0.1)' },
+                    ];
+                    const data = [timestamps, values];
+
+                    if (hasMinMax) {
+                        data.push(rows.map(r => r.min / scale), rows.map(r => r.max / scale));
+                        series.push(
+                            { label: 'Min', stroke: 'rgba(16,185,129,0.3)', width: 1, dash: [4,4] },
+                            { label: 'Max', stroke: 'rgba(16,185,129,0.3)', width: 1, dash: [4,4] },
+                        );
+                    }
+
+                    await this.$nextTick();
+                    const el = document.getElementById('chart-' + topic);
+                    if (!el) { this.chartStates[topic].loading = false; return; }
+
+                    this.destroyChart(topic);
+                    el.innerHTML = '';
+
+                    const ac = axisColor(), gc = gridColor(), spanSec = to - from;
+                    uplotInstances[topic] = new uPlot({
+                        width: el.clientWidth,
+                        height: 220,
+                        series,
+                        axes: [
+                            { stroke: ac, grid: { stroke: gc }, values: (_, ticks) => ticks.map(t => spanSec > 2*86400 ? fmtDate24(t) : fmtTime24(t)) },
+                            { stroke: ac, grid: { stroke: gc }, values: (_, ticks) => ticks.map(v => v >= 1000 ? (v/1000).toFixed(1)+'k' : String(Math.round(v*10)/10)) },
+                        ],
+                        cursor: { drag: { x: true, y: false } },
+                        scales: { x: { time: true } },
+                    }, data, el);
+
+                    resizeObservers[topic] = new ResizeObserver(() => {
+                        if (uplotInstances[topic] && el.clientWidth > 0)
+                            uplotInstances[topic].setSize({ width: el.clientWidth, height: 220 });
+                    });
+                    resizeObservers[topic].observe(el);
+                } catch (e) {
+                    console.error('Chart load error for ' + topic + ':', e);
+                }
+                this.chartStates[topic].loading = false;
+            },
+
+            formatValue(topic, value) {
+                if (value === null || value === undefined) return '—';
+                const meta = topicMeta[topic];
+                if (!meta) return String(value);
+                if (topic === 'plugged_in_ac' || topic === 'energy_backup' || topic === 'online')
+                    return value === 1 ? 'Yes' : 'No';
+                if (topic === 'remaining_time_charging' || topic === 'remaining_time_discharging') {
+                    if (value <= 0) return '—';
+                    const h = Math.floor(value / 60), m = value % 60;
+                    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+                }
+                if (meta.scale === 100) return (value / 100).toFixed(1);
+                return String(value);
+            },
+        };
+    }
+    </script>
+</body>
+</html>

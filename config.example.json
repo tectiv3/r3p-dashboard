@@ -1,0 +1,9 @@
+{
+  "mqtt": {
+    "host": "localhost",
+    "port": 1883,
+    "topic_prefix": "ecoflow/r3p"
+  },
+  "db_path": "database.db",
+  "listen": ":8080"
+}

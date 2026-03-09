@@ -1,0 +1,13 @@
+[Unit]
+Description=R3P Dashboard
+After=network.target mosquitto.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/r3p-dashboard
+ExecStart=/opt/r3p-dashboard/r3p-dashboard
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
