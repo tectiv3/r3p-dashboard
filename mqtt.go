@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -19,15 +20,30 @@ type Update struct {
 	Raw   string `json:"raw"`
 }
 
+type topicState struct {
+	value   int64
+	writeAt int64
+}
+
 type MQTTSubscriber struct {
 	cfg    MQTTConfig
 	db     *DB
 	client mqtt.Client
 	broker *Broker
+	stop   chan struct{}
+
+	mu     sync.Mutex
+	latest map[string]*topicState
 }
 
 func NewMQTTSubscriber(cfg MQTTConfig, db *DB, broker *Broker) *MQTTSubscriber {
-	return &MQTTSubscriber{cfg: cfg, db: db, broker: broker}
+	return &MQTTSubscriber{
+		cfg:    cfg,
+		db:     db,
+		broker: broker,
+		stop:   make(chan struct{}),
+		latest: make(map[string]*topicState),
+	}
 }
 
 func (m *MQTTSubscriber) Start() error {
@@ -52,6 +68,8 @@ func (m *MQTTSubscriber) Start() error {
 		return fmt.Errorf("mqtt connect: %w", err)
 	}
 	log.Printf("Connected to MQTT broker at %s", addr)
+
+	go m.fillLoop()
 	return nil
 }
 
@@ -96,10 +114,47 @@ func (m *MQTTSubscriber) handleMessage(_ mqtt.Client, msg mqtt.Message) {
 		return
 	}
 
+	m.mu.Lock()
+	m.latest[short] = &topicState{value: value, writeAt: ts}
+	m.mu.Unlock()
+
 	m.broker.Publish(Update{TS: ts, Topic: short, Value: value, Raw: payload})
 }
 
+// fillLoop re-inserts the last known value for topics that haven't
+// received a new MQTT message recently, preventing chart gaps.
+func (m *MQTTSubscriber) fillLoop() {
+	const interval = 60
+	ticker := time.NewTicker(interval * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-m.stop:
+			return
+		case <-ticker.C:
+			now := time.Now().Unix()
+			m.mu.Lock()
+			stale := make(map[string]int64)
+			for topic, st := range m.latest {
+				if now-st.writeAt >= interval {
+					stale[topic] = st.value
+					st.writeAt = now
+				}
+			}
+			m.mu.Unlock()
+
+			for topic, value := range stale {
+				if err := m.db.InsertReading(now, topic, value); err != nil {
+					log.Printf("Fill reading error for %s: %v", topic, err)
+				}
+			}
+		}
+	}
+}
+
 func (m *MQTTSubscriber) Stop() {
+	close(m.stop)
 	if m.client != nil && m.client.IsConnected() {
 		m.client.Disconnect(500)
 	}
