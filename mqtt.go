@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -31,9 +32,10 @@ func NewMQTTSubscriber(cfg MQTTConfig, db *DB, broker *Broker) *MQTTSubscriber {
 
 func (m *MQTTSubscriber) Start() error {
 	addr := fmt.Sprintf("tcp://%s:%d", m.cfg.Host, m.cfg.Port)
+	host, _ := os.Hostname()
 	opts := mqtt.NewClientOptions().
 		AddBroker(addr).
-		SetClientID("r3p-dashboard").
+		SetClientID("r3p-dashboard-" + host).
 		SetAutoReconnect(true).
 		SetOnConnectHandler(m.onConnect).
 		SetConnectionLostHandler(func(_ mqtt.Client, err error) {

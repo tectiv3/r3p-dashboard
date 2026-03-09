@@ -14,6 +14,8 @@
     <style>
         [x-cloak] { display: none !important; }
         .uplot .u-legend { display: none; }
+        .card-wrap:hover .card-dismiss,
+        .chart-wrap:hover .chart-dismiss { opacity: 1; }
     </style>
     <script>
         (function() {
@@ -57,49 +59,57 @@
         </div>
     </header>
 
-    <main class="max-w-6xl mx-auto px-6 py-8 space-y-8" x-cloak>
+    <main class="mx-auto px-6 py-8 space-y-8" x-cloak>
 
         <!-- Settings Panel -->
         <div x-show="showSettings" x-transition
              class="bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
             <div x-show="hiddenCards.size > 0 || hiddenCharts.size > 0" class="space-y-3">
-                <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Hidden Metrics</h2>
-                <div class="flex flex-wrap gap-2">
-                    <template x-for="topic in hiddenCardsList" :key="'restore-card-'+topic">
-                        <button @click="toggleCard(topic)"
-                                class="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-emerald-100 dark:hover:bg-emerald-900 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors">
-                            <span x-text="topicName(topic)"></span>
-                            <span class="text-emerald-500">+</span>
-                        </button>
-                    </template>
-                </div>
-                <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-500" x-show="hiddenCharts.size > 0">Hidden Charts</h2>
-                <div class="flex flex-wrap gap-2" x-show="hiddenCharts.size > 0">
-                    <template x-for="topic in hiddenChartsList" :key="'restore-chart-'+topic">
-                        <button @click="toggleChart(topic)"
-                                class="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-emerald-100 dark:hover:bg-emerald-900 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors">
-                            <span x-text="topicName(topic)"></span>
-                            <span class="text-emerald-500">+</span>
-                        </button>
-                    </template>
-                </div>
+                <template x-if="hiddenCards.size > 0">
+                    <div>
+                        <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-2">Hidden Metrics</h2>
+                        <div class="flex flex-wrap gap-2">
+                            <template x-for="topic in hiddenCardsList" :key="'rc-'+topic">
+                                <button @click="toggleCard(topic)"
+                                        class="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-emerald-100 dark:hover:bg-emerald-900 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors">
+                                    <span x-text="topicNames[topic] || topic"></span>
+                                    <span class="text-emerald-500">+</span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="hiddenCharts.size > 0">
+                    <div>
+                        <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-2">Hidden Charts</h2>
+                        <div class="flex flex-wrap gap-2">
+                            <template x-for="topic in hiddenChartsList" :key="'rch-'+topic">
+                                <button @click="toggleChart(topic)"
+                                        class="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-emerald-100 dark:hover:bg-emerald-900 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors">
+                                    <span x-text="topicNames[topic] || topic"></span>
+                                    <span class="text-emerald-500">+</span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
             </div>
             <div x-show="hiddenCards.size === 0 && hiddenCharts.size === 0" class="text-sm text-gray-400">
-                All metrics and charts are visible. Dismiss cards or charts with the &times; button to hide them.
+                All metrics and charts are visible. Hover over a card or chart and click &times; to hide it.
             </div>
         </div>
 
         <!-- Live Cards -->
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
             <template x-for="card in visibleCards" :key="card.topic">
-                <div class="group relative bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 transition-colors"
+                <div class="card-wrap relative bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 px-3 py-2.5 transition-colors"
                      :class="card.flash ? 'border-emerald-400 dark:border-emerald-800' : ''">
                     <button @click="toggleCard(card.topic)"
-                            class="absolute top-2 right-2 size-5 flex items-center justify-center rounded text-gray-300 dark:text-gray-700 opacity-0 group-hover:opacity-100 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 transition-all"
-                            title="Hide metric">&times;</button>
-                    <div class="text-xs text-gray-500 uppercase tracking-wide" x-text="card.label"></div>
-                    <div class="mt-1 text-2xl font-mono font-bold" x-text="formatValue(card.topic, card.value)"></div>
-                    <div class="text-xs text-gray-400 dark:text-gray-600 mt-1" x-text="card.unit"></div>
+                            class="card-dismiss absolute top-1.5 right-1.5 size-4 flex items-center justify-center rounded-full opacity-0 text-gray-400 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-200 dark:hover:bg-gray-800 transition-all text-xs"
+                            title="Hide">&times;</button>
+                    <div class="text-[10px] text-gray-500 uppercase tracking-wide leading-tight" x-text="card.label"></div>
+                    <div class="mt-0.5 text-lg font-mono font-bold leading-tight" x-text="formatValue(card.topic, card.value)"></div>
+                    <div class="text-[10px] text-gray-400 dark:text-gray-600" x-text="card.unit"></div>
                 </div>
             </template>
         </div>
@@ -119,16 +129,20 @@
             </div>
         </div>
 
-        <!-- Charts -->
-        <template x-for="ct in visibleChartTopics" :key="ct">
-            <div class="group relative bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
-                <button @click="toggleChart(ct)"
-                        class="absolute top-3 right-3 size-6 flex items-center justify-center rounded text-gray-300 dark:text-gray-700 opacity-0 group-hover:opacity-100 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 transition-all"
-                        title="Hide chart">&times;</button>
-                <div class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-3" x-text="topicName(ct)"></div>
-                <div :id="'chart-' + ct" class="w-full"></div>
-                <div x-show="chartStates[ct]?.loading" class="text-center text-gray-500 py-8 text-sm">Loading...</div>
-                <div x-show="!chartStates[ct]?.loading && chartStates[ct]?.empty" class="text-center text-gray-400 dark:text-gray-600 py-8 text-sm">No data for this range</div>
+        <!-- Charts (grouped rows) -->
+        <template x-for="row in visibleChartRows" :key="row.map(t=>t).join('-')">
+            <div class="grid gap-4" :class="row.length > 1 ? 'grid-cols-1 lg:grid-cols-2' : ''">
+                <template x-for="ct in row" :key="ct">
+                    <div class="chart-wrap relative bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
+                        <button @click="toggleChart(ct)"
+                                class="chart-dismiss absolute top-3 right-3 size-6 flex items-center justify-center rounded-full opacity-0 text-gray-400 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-gray-200 dark:hover:bg-gray-800 transition-all text-sm"
+                                title="Hide">&times;</button>
+                        <div class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-3" x-text="topicNames[ct] || ct"></div>
+                        <div :id="'chart-' + ct" class="w-full"></div>
+                        <div x-show="chartStates[ct]?.loading" class="text-center text-gray-500 py-8 text-sm">Loading...</div>
+                        <div x-show="!chartStates[ct]?.loading && chartStates[ct]?.empty" class="text-center text-gray-400 dark:text-gray-600 py-8 text-sm">No data for this range</div>
+                    </div>
+                </template>
             </div>
         </template>
 
@@ -163,7 +177,6 @@
 
     <script>
     function dashboard() {
-        const topicMeta = {};
         const allTopicKeys = [
             'battery_level', 'input_power', 'output_power',
             'ac_input_power', 'ac_output_power', 'dc_input_power',
@@ -180,9 +193,23 @@
             'cell_temperature',
             'dc12v_output_power', 'usba_output_power', 'usbc_output_power',
         ];
+        // Grouped chart layout: arrays within = side-by-side on one row
+        const chartLayout = [
+            ['battery_level', 'cell_temperature'],
+            ['input_power', 'output_power'],
+            ['ac_input_power'],
+            ['ac_output_power'],
+            ['dc_input_power'],
+            ['dc12v_output_power'],
+            ['usba_output_power'],
+            ['usbc_output_power'],
+        ];
 
         const uplotInstances = {};
         const resizeObservers = {};
+
+        // Stored as reactive Alpine property, not closure
+        let topicMetaCache = {};
 
         function loadSet(key) {
             try {
@@ -215,6 +242,8 @@
             cards: [],
             values: {},
             events: [],
+            // Reactive topic name map — Alpine tracks this
+            topicNames: {},
             sseStatus: 'Connecting...',
             updateCount: 0,
             chartRange: localStorage.getItem('r3p-range') || '6h',
@@ -245,15 +274,16 @@
             get visibleChartTopics() {
                 return chartableKeys.filter(k => !this.hiddenCharts.has(k));
             },
+            get visibleChartRows() {
+                return chartLayout
+                    .map(row => row.filter(k => !this.hiddenCharts.has(k)))
+                    .filter(row => row.length > 0);
+            },
             get hiddenCardsList() {
                 return allTopicKeys.filter(k => this.hiddenCards.has(k));
             },
             get hiddenChartsList() {
                 return chartableKeys.filter(k => this.hiddenCharts.has(k));
-            },
-
-            topicName(topic) {
-                return topicMeta[topic]?.name || topic;
             },
 
             fmtEventTime(ts) {
@@ -283,7 +313,6 @@
             toggleCard(topic) {
                 if (this.hiddenCards.has(topic)) this.hiddenCards.delete(topic);
                 else this.hiddenCards.add(topic);
-                // Force reactivity on the Set
                 this.hiddenCards = new Set(this.hiddenCards);
                 saveSet('r3p-hidden-cards', this.hiddenCards);
             },
@@ -312,14 +341,18 @@
             async init() {
                 const resp = await fetch('/api/topics');
                 const topics = await resp.json();
+                // Build reactive name map
+                const names = {};
                 for (const [key, meta] of Object.entries(topics)) {
-                    topicMeta[key] = meta;
+                    topicMetaCache[key] = meta;
+                    names[key] = meta.name;
                 }
+                this.topicNames = names;
 
                 this.cards = allTopicKeys.map(topic => ({
                     topic,
-                    label: topicMeta[topic]?.name || topic,
-                    unit: topicMeta[topic]?.unit || '',
+                    label: topicMetaCache[topic]?.name || topic,
+                    unit: topicMetaCache[topic]?.unit || '',
                     value: null,
                     flash: false,
                 }));
@@ -368,6 +401,9 @@
             applyValue(topic, value) {
                 this.values[topic] = value;
                 if (topic === 'online') this.online = value === 1;
+                if (topic === 'battery_level') {
+                    document.title = `${(value / 100).toFixed(0)}% — R3P Dashboard`;
+                }
                 const card = this.cards.find(c => c.topic === topic);
                 if (card) {
                     card.value = value;
@@ -406,7 +442,7 @@
                 const now = Math.floor(Date.now() / 1000);
                 const from = now - range.seconds;
                 const to = now;
-                const meta = topicMeta[topic];
+                const meta = topicMetaCache[topic];
                 const scale = meta?.scale || 1;
 
                 try {
@@ -471,7 +507,7 @@
 
             formatValue(topic, value) {
                 if (value === null || value === undefined) return '—';
-                const meta = topicMeta[topic];
+                const meta = topicMetaCache[topic];
                 if (!meta) return String(value);
                 if (topic === 'plugged_in_ac' || topic === 'energy_backup' || topic === 'online')
                     return value === 1 ? 'Yes' : 'No';
