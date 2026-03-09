@@ -16,6 +16,19 @@
         .uplot .u-legend { display: none; }
         .card-wrap:hover .card-dismiss,
         .chart-wrap:hover .chart-dismiss { opacity: 1; }
+        .u-tooltip {
+            position: absolute;
+            z-index: 100;
+            pointer-events: none;
+            background: rgba(17,24,39,0.9);
+            color: #e5e7eb;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: nowrap;
+            border: 1px solid rgba(107,114,128,0.3);
+        }
     </style>
     <script>
         (function() {
@@ -210,6 +223,48 @@
 
         // Stored as reactive Alpine property, not closure
         let topicMetaCache = {};
+
+        function tooltipPlugin() {
+            let tt;
+            return {
+                hooks: {
+                    init(u) {
+                        tt = document.createElement('div');
+                        tt.className = 'u-tooltip';
+                        tt.style.display = 'none';
+                        u.over.appendChild(tt);
+                    },
+                    setCursor(u) {
+                        const idx = u.cursor.idx;
+                        if (idx == null) { tt.style.display = 'none'; return; }
+                        const ts = u.data[0][idx];
+                        const val = u.data[1][idx];
+                        if (val == null) { tt.style.display = 'none'; return; }
+                        const d = new Date(ts * 1000);
+                        const time = String(d.getDate()).padStart(2,'0') + '.' +
+                            String(d.getMonth()+1).padStart(2,'0') + ' ' +
+                            String(d.getHours()).padStart(2,'0') + ':' +
+                            String(d.getMinutes()).padStart(2,'0');
+                        let html = `<b>${time}</b><br>${u.series[1].label}: ${Math.round(val*10)/10}`;
+                        // Show min/max if band series exist
+                        if (u.data.length > 2) {
+                            const max = u.data[2]?.[idx];
+                            const min = u.data[3]?.[idx];
+                            if (max != null && min != null && max !== min)
+                                html += `<br><span style="color:#9ca3af">Min: ${Math.round(min*10)/10} · Max: ${Math.round(max*10)/10}</span>`;
+                        }
+                        tt.innerHTML = html;
+                        tt.style.display = '';
+                        const left = u.cursor.left;
+                        const top = u.cursor.top;
+                        const ttW = tt.offsetWidth;
+                        const overW = u.over.offsetWidth;
+                        tt.style.left = (left + ttW + 16 > overW ? left - ttW - 8 : left + 8) + 'px';
+                        tt.style.top = Math.max(0, top - tt.offsetHeight - 8) + 'px';
+                    },
+                },
+            };
+        }
 
         function loadSet(key) {
             try {
@@ -460,19 +515,22 @@
                     const values = rows.map(r => r.value / scale);
                     const hasMinMax = rows.some(r => r.min !== r.max);
 
-                    const series = [
-                        {},
-                        { label: meta?.name || topic, stroke: '#10b981', width: 1.5, fill: 'rgba(16,185,129,0.1)' },
-                    ];
-                    const data = [timestamps, values];
+                    const data = [timestamps];
+                    const series = [{}];
 
                     if (hasMinMax) {
-                        data.push(rows.map(r => r.min / scale), rows.map(r => r.max / scale));
-                        series.push(
-                            { label: 'Min', stroke: 'rgba(16,185,129,0.3)', width: 1, dash: [4,4] },
-                            { label: 'Max', stroke: 'rgba(16,185,129,0.3)', width: 1, dash: [4,4] },
-                        );
+                        // Band: max line (top edge) and min line (bottom edge), filled between
+                        data.push(rows.map(r => r.max / scale));
+                        series.push({ label: 'Max', stroke: 'transparent', width: 0, points: { show: false } });
+                        data.push(rows.map(r => r.min / scale));
+                        series.push({ label: 'Min', stroke: 'transparent', width: 0, points: { show: false },
+                            band: true, fill: 'rgba(16,185,129,0.08)' });
                     }
+
+                    // Avg/value line on top
+                    data.splice(1, 0, values);
+                    series.splice(1, 0, { label: meta?.name || topic, stroke: '#10b981', width: 1.5,
+                        fill: hasMinMax ? undefined : 'rgba(16,185,129,0.1)' });
 
                     await this.$nextTick();
                     const el = document.getElementById('chart-' + topic);
@@ -482,16 +540,19 @@
                     el.innerHTML = '';
 
                     const ac = axisColor(), gc = gridColor(), spanSec = to - from;
+                    const bands = hasMinMax ? [{ series: [2, 3] }] : undefined;
                     uplotInstances[topic] = new uPlot({
                         width: el.clientWidth,
                         height: 220,
                         series,
+                        bands,
                         axes: [
                             { stroke: ac, grid: { stroke: gc }, values: (_, ticks) => ticks.map(t => spanSec > 2*86400 ? fmtDate24(t) : fmtTime24(t)) },
                             { stroke: ac, grid: { stroke: gc }, values: (_, ticks) => ticks.map(v => v >= 1000 ? (v/1000).toFixed(1)+'k' : String(Math.round(v*10)/10)) },
                         ],
                         cursor: { drag: { x: true, y: false } },
-                        scales: { x: { time: true } },
+                        scales: { x: { time: true, min: from, max: to } },
+                        plugins: [tooltipPlugin()],
                     }, data, el);
 
                     resizeObservers[topic] = new ResizeObserver(() => {
