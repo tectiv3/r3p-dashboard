@@ -133,6 +133,11 @@ func (m *MQTTSubscriber) fillLoop() {
 		case <-m.stop:
 			return
 		case <-ticker.C:
+			// Filling while the broker is down fabricates flat data and
+			// masks outages; leave a gap in the charts instead.
+			if !m.client.IsConnectionOpen() {
+				continue
+			}
 			now := time.Now().Unix()
 			m.mu.Lock()
 			stale := make(map[string]int64)
